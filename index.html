@@ -452,8 +452,8 @@
             <select id="filterPriority">
               <option value="all">Alle Prioritäten</option>
               <option value="3">Must-see</option>
-              <option value="2">interessant</option>
-              <option value="1">optional</option>
+              <option value="2">Interessant</option>
+              <option value="1">Optional</option>
             </select>
           </div>
           <div class="form-row">
@@ -740,7 +740,7 @@
     }
 
     function priorityLabel(priority) {
-      return Number(priority) === 3 ? 'Must-see' : Number(priority) === 2 ? 'Sehr interessant' : 'Optional';
+      return Number(priority) === 3 ? 'Must-see' : Number(priority) === 2 ? 'Interessant' : 'Optional';
     }
 
     function markerColor(priority) {
