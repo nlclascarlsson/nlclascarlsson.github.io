@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       --bg: #f7f1e8;
@@ -371,7 +372,7 @@
       <section class="hero">
         <div class="eyebrow">✦ Japan Reiseplanung</div>
         <h1>Ideen & Karte</h1>
-        <p class="subtitle">Sammle Wunschziele, priorisiere sie und behalte alles lokal im Browser gespeichert.</p>
+        <p class="subtitle">Sammle Wunschziele, priorisiere sie und speichere deine Ziele in Supabase – mit lokalem Fallback.</p>
       </section>
       <div class="top-actions">
         <button class="secondary" id="exportBtn">Daten exportieren</button>
@@ -507,6 +508,21 @@
   <script>
     const STORAGE_KEY = 'japanTripDashboard.v1';
 
+    // ================= SUPABASE KONFIGURATION =================
+    // Trage hier deine Werte aus Supabase ein:
+    // Project Settings → Data API → Project URL
+    // Project Settings → API Keys → anon/public key
+    // Wichtig: Niemals den service_role/secret key im Browser verwenden.
+    const SUPABASE_URL = 'https://mtlnvmydzujswuqntqfu.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_vi8xjMySLg7gycQwmECAnA_IYFdeFx6';
+    const SUPABASE_TABLE = 'destinations';
+
+    const supabaseClient = isSupabaseConfigured()
+      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      : null;
+
+    // ===========================================================
+
     const defaultData = {
       ideas: [
         { id: crypto.randomUUID(), title: 'Fushimi Inari Taisha', city: 'Kyoto', category: 'Sehenswürdigkeit', priority: 3, address: '68 Fukakusa Yabunouchicho, Fushimi Ward, Kyoto, Japan', lat: 34.9671, lng: 135.7727, day: 2, notes: 'Früh morgens besuchen, um Menschenmassen zu vermeiden.' },
@@ -515,7 +531,7 @@
       ]
     };
 
-    let data = loadData();
+    let data = loadLocalData();
     let markers = new Map();
     let searchPreviewMarker = null;
 
@@ -612,7 +628,11 @@
       else map.setView(center, 14, { animate: true });
     }
 
-    function loadData() {
+    function isSupabaseConfigured() {
+      return SUPABASE_URL && SUPABASE_ANON_KEY && !SUPABASE_URL.includes('DEINE_') && !SUPABASE_ANON_KEY.includes('DEIN_');
+    }
+
+    function loadLocalData() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         const parsed = raw ? JSON.parse(raw) : defaultData;
@@ -623,9 +643,99 @@
       }
     }
 
-    function saveData() {
+    function saveLocalData() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+
+    function normalizeIdeaFromDb(row) {
+      return {
+        id: row.id || crypto.randomUUID(),
+        title: row.title || '',
+        city: row.city || row.place || '',
+        address: row.address || '',
+        category: row.category || 'Sonstiges',
+        priority: Number(row.priority) || 1,
+        day: row.day ? Number(row.day) : '',
+        lat: Number(row.lat),
+        lng: Number(row.lng),
+        notes: row.notes || ''
+      };
+    }
+
+    function ideaToDbRow(idea) {
+      return {
+        id: idea.id,
+        title: idea.title,
+        city: idea.city || '',
+        address: idea.address || '',
+        category: idea.category || 'Sonstiges',
+        priority: Number(idea.priority) || 1,
+        day: idea.day || null,
+        lat: Number(idea.lat),
+        lng: Number(idea.lng),
+        notes: idea.notes || '',
+        updated_at: new Date().toISOString()
+      };
+    }
+
+    async function loadSupabaseData() {
+      if (!supabaseClient) return null;
+      const { data: rows, error } = await supabaseClient
+        .from(SUPABASE_TABLE)
+        .select('*')
+        .order('day', { ascending: true, nullsFirst: false })
+        .order('priority', { ascending: false });
+
+      if (error) throw error;
+      return { ideas: (rows || []).map(normalizeIdeaFromDb).filter(i => i.title && Number.isFinite(i.lat) && Number.isFinite(i.lng)) };
+    }
+
+    async function saveData(options = {}) {
+      saveLocalData();
       render();
+
+      if (!supabaseClient) return;
+      try {
+        if (options.replaceRemote) {
+          await supabaseClient.from(SUPABASE_TABLE).delete().neq('id', '__never__');
+        }
+        const rows = data.ideas.map(ideaToDbRow);
+        if (rows.length) {
+          const { error } = await supabaseClient.from(SUPABASE_TABLE).upsert(rows, { onConflict: 'id' });
+          if (error) throw error;
+        }
+      } catch (err) {
+        console.warn('Supabase-Speicherung fehlgeschlagen. LocalStorage bleibt als Fallback aktiv:', err);
+        alert('Supabase-Speicherung fehlgeschlagen. Die Daten wurden lokal im Browser gespeichert. Prüfe URL, anon key, Tabelle und Policies.');
+      }
+    }
+
+    async function deleteRemoteIdea(id) {
+      if (!supabaseClient) return;
+      const { error } = await supabaseClient.from(SUPABASE_TABLE).delete().eq('id', id);
+      if (error) console.warn('Supabase-Löschen fehlgeschlagen:', error);
+    }
+
+    async function initStorage() {
+      if (!supabaseClient) {
+        render();
+        return;
+      }
+
+      try {
+        const remoteData = await loadSupabaseData();
+        if (remoteData && remoteData.ideas.length) {
+          data = remoteData;
+          saveLocalData();
+        } else if (data.ideas.length) {
+          await saveData({ replaceRemote: true });
+        }
+        render();
+      } catch (err) {
+        console.warn('Supabase konnte nicht geladen werden. Nutze LocalStorage-Fallback:', err);
+        alert('Supabase konnte nicht geladen werden. Das Dashboard nutzt vorerst LocalStorage. Prüfe URL, anon key, Tabelle und Policies.');
+        render();
+      }
     }
 
     function priorityLabel(priority) {
@@ -747,7 +857,7 @@
       refreshMapSize();
     }
 
-    document.getElementById('ideaForm').addEventListener('submit', (e) => {
+    document.getElementById('ideaForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const id = document.getElementById('ideaId').value;
       const idea = {
@@ -768,7 +878,7 @@
 
       if (searchPreviewMarker) { searchPreviewMarker.remove(); searchPreviewMarker = null; }
       resetForm({ keepPlanningValues: true, day: idea.day, priority: idea.priority });
-      saveData();
+      await saveData();
       focusIdea(idea.id);
     });
 
@@ -790,10 +900,11 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function deleteIdea(id) {
+    async function deleteIdea(id) {
       if (!confirm('Diese Idee wirklich löschen?')) return;
       data.ideas = data.ideas.filter(i => i.id !== id);
-      saveData();
+      await deleteRemoteIdea(id);
+      await saveData();
     }
 
     function focusIdea(id) {
@@ -820,11 +931,11 @@
     ['filterPriority','filterDay','filterCity'].forEach(id => document.getElementById(id).addEventListener('change', render));
 
 
-    document.getElementById('resetBtn').addEventListener('click', () => {
+    document.getElementById('resetBtn').addEventListener('click', async () => {
       if (!confirm('Alle gespeicherten Daten löschen und Beispielwerte wiederherstellen?')) return;
       localStorage.removeItem(STORAGE_KEY);
       data = structuredClone(defaultData);
-      saveData();
+      await saveData({ replaceRemote: true });
     });
 
     document.getElementById('exportBtn').addEventListener('click', () => {
@@ -841,14 +952,44 @@
     document.getElementById('importFile').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
+
       try {
         const imported = JSON.parse(await file.text());
-        if (!Array.isArray(imported.ideas)) throw new Error('Ungültiges Format');
-        imported.ideas = imported.ideas.map(idea => ({ ...idea, day: idea.day || '' }));
-        data = { ideas: imported.ideas };
-        saveData();
+        const importedIdeas = Array.isArray(imported) ? imported : imported.ideas;
+
+        if (!Array.isArray(importedIdeas)) {
+          throw new Error('Die Datei enthält keine gültige Ideenliste. Bitte eine exportierte japan-reiseplanung.json auswählen.');
+        }
+
+        const cleanedIdeas = importedIdeas
+          .map((idea) => ({
+            id: idea.id || crypto.randomUUID(),
+            title: String(idea.title || '').trim(),
+            city: String(idea.city || '').trim(),
+            address: String(idea.address || '').trim(),
+            category: idea.category || 'Sonstiges',
+            priority: Number(idea.priority) || 1,
+            day: idea.day ? Number(idea.day) : '',
+            lat: Number(idea.lat),
+            lng: Number(idea.lng),
+            notes: String(idea.notes || '').trim()
+          }))
+          .filter((idea) => idea.title && Number.isFinite(idea.lat) && Number.isFinite(idea.lng));
+
+        if (!cleanedIdeas.length) {
+          throw new Error('Es wurden keine importierbaren Ziele mit Titel und Koordinaten gefunden.');
+        }
+
+        const replaceExisting = confirm(`${cleanedIdeas.length} Ziele importieren?\n\nOK = bestehende Ziele ersetzen\nAbbrechen = Import abbrechen`);
+        if (!replaceExisting) return;
+
+        data = { ideas: cleanedIdeas };
+        await saveData({ replaceRemote: true });
+        alert(`${cleanedIdeas.length} Ziele wurden erfolgreich importiert.`);
       } catch (err) {
         alert('Import fehlgeschlagen: ' + err.message);
+      } finally {
+        e.target.value = '';
       }
     });
 
@@ -863,7 +1004,7 @@
       }[char]));
     }
 
-    render();
+    initStorage();
   </script>
 </body>
 </html>
