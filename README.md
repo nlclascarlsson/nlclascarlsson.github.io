@@ -1,1 +1,869 @@
-# nlclascarlsson.github.io
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Japan Reiseplanung Dashboard</title>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+  <style>
+    :root {
+      --bg: #f7f1e8;
+      --panel: rgba(255, 252, 246, 0.88);
+      --panel-solid: #fffaf2;
+      --text: #2f2923;
+      --muted: #766b5f;
+      --line: #e6d8c8;
+      --accent: #c76d3c;
+      --accent-dark: #9f4f2b;
+      --green: #607d54;
+      --yellow: #c99b35;
+      --red: #ba4a3d;
+      --shadow: 0 18px 50px rgba(91, 64, 39, .14);
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(199,109,60,.18), transparent 34rem),
+        radial-gradient(circle at 80% 15%, rgba(96,125,84,.14), transparent 30rem),
+        linear-gradient(135deg, #f8f1e7 0%, #efe3d4 100%);
+    }
+
+    .app {
+      width: min(1760px, calc(100vw - 20px));
+      margin: 0 auto;
+      padding: 10px 0 14px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding: 8px 10px;
+      border: 1px solid rgba(230,216,200,.75);
+      border-radius: 16px;
+      background: rgba(255,250,242,.72);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 10px 28px rgba(91, 64, 39, .10);
+      flex: 0 0 auto;
+    }
+
+    .hero {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      font-size: 11px;
+      color: var(--accent-dark);
+      background: #f2dfcf;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(18px, 1.5vw, 24px);
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      white-space: nowrap;
+    }
+
+    .subtitle { display: none; }
+
+    .top-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+    button, input, textarea, select {
+      font: inherit;
+    }
+
+    body { font-size: 14px; }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      background: var(--text);
+      color: #fffaf2;
+      padding: 8px 11px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 700;
+      transition: transform .15s ease, opacity .15s ease, background .15s ease;
+    }
+
+    button:hover { transform: translateY(-1px); opacity: .94; }
+    button.secondary { background: #eadbc9; color: var(--text); }
+    button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+    button.danger { background: #7f2f2a; }
+    button.small { padding: 6px 8px; border-radius: 9px; font-size: 11px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 350px minmax(620px, 1fr);
+      gap: 12px;
+      align-items: start;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .left-col,
+    .right-col {
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .left-col {
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-width: thin;
+    }
+
+    .map-card {
+      flex: 0 0 auto;
+      position: relative;
+    }
+
+    .wishlist-card {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
+    .wishlist-card .card-body {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .wishlist-card .idea-list {
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-width: thin;
+      min-height: 0;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid rgba(230,216,200,.82);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      overflow: hidden;
+    }
+
+    .card-head {
+      padding: 11px 14px 8px;
+      border-bottom: 1px solid rgba(230,216,200,.7);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card h2 { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
+    .card-body { padding: 11px 14px 14px; }
+
+    label { display: block; font-size: 11px; font-weight: 750; color: #53473c; margin-bottom: 4px; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.55);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 13px;
+      color: var(--text);
+      outline: none;
+      transition: box-shadow .15s ease, border-color .15s ease;
+    }
+    textarea { min-height: 44px; max-height: 92px; resize: vertical; }
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(199,109,60,.55);
+      box-shadow: 0 0 0 4px rgba(199,109,60,.12);
+    }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .field { margin-bottom: 13px; }
+
+    .hint { color: var(--muted); font-size: 11px; line-height: 1.35; margin-top: 4px; }
+
+    #map {
+      height: min(39vh, 390px);
+      min-height: 300px;
+      border-radius: 0 0 var(--radius) var(--radius);
+      z-index: 1;
+      background: #eadbc9;
+    }
+
+    .map-status {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      z-index: 500;
+      display: none;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 250, 242, .94);
+      border: 1px solid var(--line);
+      box-shadow: 0 12px 34px rgba(91, 64, 39, .18);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+
+    .map-toolbar {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      border: 1px solid rgba(0,0,0,.06);
+      background: #f4eadc;
+      color: #5b4e43;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 999px; display: inline-block; }
+    .prio-1 .dot, .dot.low { background: var(--green); }
+    .prio-2 .dot, .dot.mid { background: var(--yellow); }
+    .prio-3 .dot, .dot.high { background: var(--red); }
+
+    .idea-list { display: flex; flex-direction: column; gap: 7px; }
+    .idea {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.42);
+      border-radius: 13px;
+      padding: 9px;
+      cursor: pointer;
+    }
+    .idea:hover { background: rgba(255,255,255,.68); }
+    .idea-title { display:flex; justify-content:space-between; align-items:start; gap:8px; font-weight: 850; font-size: 14px; }
+    .idea-meta { display:flex; flex-wrap:wrap; gap:5px; margin-top: 6px; }
+    .idea-notes { color: var(--muted); margin: 6px 0 0; font-size: 11px; line-height:1.45; }
+
+    .empty {
+      color: var(--muted);
+      border: 1px dashed #d7c3ad;
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+      background: rgba(255,255,255,.25);
+    }
+
+    .pack-input { display:flex; gap: 8px; margin-bottom: 14px; }
+    .pack-input input { flex: 1; }
+    .pack-input button { white-space: nowrap; }
+    .pack-item {
+      display:flex;
+      gap: 10px;
+      align-items:center;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.42);
+      padding: 11px;
+      border-radius: 15px;
+    }
+    .pack-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+    .pack-item span { flex: 1; }
+    .pack-item.done span { text-decoration: line-through; color: var(--muted); }
+
+    .stats {
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .stat { background: rgba(255,255,255,.45); border:1px solid var(--line); border-radius: 11px; padding: 7px 8px; }
+    .stat strong { display:block; font-size: 18px; letter-spacing:-.04em; }
+    .stat span { color: var(--muted); font-size: 11px; }
+    .wishlist-head { align-items: center; }
+    .compact-stats { width: min(360px, 55%); margin-bottom: 0; }
+    .list-body { padding-top: 8px; }
+    .compact-stats .stat span { white-space: nowrap; }
+
+
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #fffaf2; color: var(--text); }
+    .popup-title { font-weight: 850; font-size: 15px; margin-bottom: 6px; }
+    .map-link { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(199,109,60,.45); }
+    .map-link:hover { color: var(--accent-dark); border-bottom-color: var(--accent-dark); }
+    .popup-text { color: var(--muted); margin-bottom: 8px; }
+    .popup-actions { display:flex; gap:6px; }
+
+
+    .leaflet-control-geocoder {
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 26px rgba(91, 64, 39, .16);
+      background: #fffaf2;
+    }
+    .leaflet-control-geocoder-form input {
+      border: 0;
+      border-radius: 0;
+      background: #fffaf2;
+      min-width: min(320px, 62vw);
+      padding: 8px 10px;
+    }
+    .leaflet-control-geocoder-alternatives {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 12px 34px rgba(91, 64, 39, .18);
+    }
+
+    @media (max-width: 1100px) {
+      .compact-stats { width: auto; }
+      .app { height: auto; min-height: 100vh; overflow: visible; }
+      .grid { grid-template-columns: 1fr; overflow: visible; }
+      .left-col, .right-col { height: auto; overflow: visible; }
+      .wishlist-card .idea-list { max-height: 560px; }
+      #map { height: 520px; min-height: 520px; }
+    }
+    @media (max-width: 860px) {
+      .app { width: min(100% - 20px, 720px); padding-top: 12px; }
+      header { flex-direction: column; align-items: stretch; }
+      .hero { justify-content: space-between; }
+      .top-actions button { flex: 1; }
+      .form-row { grid-template-columns: 1fr; }
+      #map { height: 480px; min-height: 480px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <section class="hero">
+        <div class="eyebrow">✦ Japan Reiseplanung</div>
+        <h1>Ideen & Karte</h1>
+        <p class="subtitle">Sammle Wunschziele, priorisiere sie und behalte alles lokal im Browser gespeichert.</p>
+      </section>
+      <div class="top-actions">
+        <button class="secondary" id="exportBtn">Daten exportieren</button>
+        <button class="ghost" id="importBtn">Importieren</button>
+        <input type="file" id="importFile" accept="application/json" hidden>
+        <button class="danger" id="resetBtn">Zurücksetzen</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <aside class="left-col">
+      <section class="card input-card">
+        <div class="card-head">
+          <h2>Neue Idee</h2>
+          <span class="pill"><span class="dot high"></span>Map-Pin</span>
+        </div>
+        <div class="card-body">
+          <form id="ideaForm">
+            <input type="hidden" id="ideaId">
+            <div class="field">
+              <label for="title">Titel</label>
+              <input id="title" required placeholder="z. B. Fushimi Inari Schrein">
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="city">Ort / Region</label>
+                <input id="city" placeholder="Kyoto">
+              </div>
+              <div class="field">
+                <label for="category">Kategorie</label>
+                <select id="category">
+                  <option>Sehenswürdigkeit</option>
+                  <option>Essen</option>
+                  <option>Unterkunft</option>
+                  <option>Natur</option>
+                  <option>Shopping</option>
+                  <option>Transport</option>
+                  <option>Sonstiges</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="address">Adresse</label>
+              <input id="address" placeholder="Wird bei Auswahl eines Suchergebnisses automatisch befüllt">
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="priority">Wichtigkeit</label>
+                <select id="priority">
+                  <option value="3">Must-see</option>
+                  <option value="2">Sehr interessant</option>
+                  <option value="1">Optional</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="day">Reisetag</label>
+                <input id="day" type="number" min="1" step="1" placeholder="z. B. 3">
+              </div>
+            </div>
+            <input id="lat" type="hidden" required>
+            <input id="lng" type="hidden" required>
+            <div class="field">
+              <label for="notes">Notizen</label>
+              <textarea id="notes" placeholder="Warum interessant? Öffnungszeiten? Ticket? Food Spot in der Nähe?"></textarea>
+            </div>
+            <button type="submit" id="saveIdeaBtn">Idee speichern</button>
+            <button type="button" class="secondary" id="cancelEditBtn" style="display:none; margin-left:8px;">Abbrechen</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="card filter-card">
+        <div class="card-head"><h2>Filter</h2></div>
+        <div class="card-body">
+          <div class="field">
+            <label for="filterPriority">Nach Wichtigkeit filtern</label>
+            <select id="filterPriority">
+              <option value="all">Alle Prioritäten</option>
+              <option value="3">Nur Must-see</option>
+              <option value="2">Nur sehr interessant</option>
+              <option value="1">Nur optional</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="filterDay">Nach Tag filtern</label>
+              <select id="filterDay">
+                <option value="all">Alle Tage</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="filterCity">Nach Ort filtern</label>
+              <select id="filterCity">
+                <option value="all">Alle Orte</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
+      </aside>
+
+      <section class="right-col">
+      <section class="card map-card">
+        <div class="card-head">
+          <h2>Karte</h2>
+          <div class="map-toolbar">
+            <span class="pill prio-3"><span class="dot"></span>Must-see</span>
+            <span class="pill prio-2"><span class="dot"></span>Interessant</span>
+            <span class="pill prio-1"><span class="dot"></span>Optional</span>
+          </div>
+        </div>
+        <div id="map"></div>
+        <div id="mapStatus" class="map-status">Kartenkacheln konnten nicht geladen werden. Prüfe bitte deine Internetverbindung, Adblocker/Firewall oder versuche einen anderen Kartenstil über den Layer-Button oben rechts in der Karte.</div>
+      </section>
+
+        <section class="card wishlist-card">
+          <div class="card-head wishlist-head"><h2>Wunschziele</h2>
+            <div class="stats compact-stats">
+              <div class="stat"><strong id="countIdeas">0</strong><span>Ideen</span></div>
+              <div class="stat"><strong id="countMust">0</strong><span>Must-see</span></div>
+              <div class="stat"><strong id="countVisible">0</strong><span>sichtbar</span></div>
+            </div>
+          </div>
+          <div class="card-body list-body">
+            <div class="idea-list" id="ideaList"></div>
+          </div>
+        </section>
+
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'japanTripDashboard.v1';
+
+    const defaultData = {
+      ideas: [
+        { id: crypto.randomUUID(), title: 'Fushimi Inari Taisha', city: 'Kyoto', category: 'Sehenswürdigkeit', priority: 3, address: '68 Fukakusa Yabunouchicho, Fushimi Ward, Kyoto, Japan', lat: 34.9671, lng: 135.7727, day: 2, notes: 'Früh morgens besuchen, um Menschenmassen zu vermeiden.' },
+        { id: crypto.randomUUID(), title: 'Shibuya Crossing', city: 'Tokyo', category: 'Sehenswürdigkeit', priority: 2, address: 'Shibuya Crossing, Shibuya City, Tokyo, Japan', lat: 35.6595, lng: 139.7005, day: 1, notes: 'Abends mit Neonlichtern besonders spannend.' },
+        { id: crypto.randomUUID(), title: 'Dotonbori Food Walk', city: 'Osaka', category: 'Essen', priority: 3, address: 'Dotonbori, Chuo Ward, Osaka, Japan', lat: 34.6687, lng: 135.5012, day: 4, notes: 'Takoyaki, Okonomiyaki und Street Food einplanen.' }
+      ]
+    };
+
+    let data = loadData();
+    let markers = new Map();
+    let searchPreviewMarker = null;
+
+    const map = L.map('map', { zoomControl: true }).setView([36.2048, 138.2529], 5);
+
+    const mapStatus = document.getElementById('mapStatus');
+    let tileErrors = 0;
+
+    const baseLayers = {
+      'OpenStreetMap': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
+        crossOrigin: true
+      }),
+      'Carto Light': L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 20,
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        crossOrigin: true
+      }),
+      'Esri WorldTopo': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: 'Tiles &copy; Esri'
+      })
+    };
+
+    Object.values(baseLayers).forEach(layer => {
+      layer.on('tileload', () => {
+        mapStatus.style.display = 'none';
+      });
+      layer.on('tileerror', () => {
+        tileErrors += 1;
+        if (tileErrors >= 3) mapStatus.style.display = 'block';
+      });
+    });
+
+    baseLayers['Carto Light'].addTo(map);
+    L.control.layers(baseLayers, null, { collapsed: true }).addTo(map);
+
+    const geocoder = L.Control.geocoder({
+      defaultMarkGeocode: false,
+      placeholder: 'Ort suchen…',
+      errorMessage: 'Kein Ort gefunden.',
+      geocoder: L.Control.Geocoder.nominatim({
+        geocodingQueryParams: {
+          countrycodes: 'jp',
+          addressdetails: 1,
+          limit: 8
+        }
+      })
+    })
+      .on('markgeocode', (event) => {
+        applyGeocodeResult(event.geocode);
+      })
+      .addTo(map);
+
+
+    function refreshMapSize() {
+      requestAnimationFrame(() => map.invalidateSize({ animate: false }));
+    }
+
+    window.addEventListener('load', refreshMapSize);
+    window.addEventListener('resize', refreshMapSize);
+    setTimeout(refreshMapSize, 150);
+    setTimeout(refreshMapSize, 700);
+
+    map.on('click', (e) => {
+      document.getElementById('lat').value = e.latlng.lat.toFixed(6);
+      document.getElementById('lng').value = e.latlng.lng.toFixed(6);
+    });
+
+
+    function applyGeocodeResult(result) {
+      if (!result || !result.center) return;
+      const center = result.center;
+      const props = result.properties || {};
+      const addr = props.address || {};
+      const placeName = result.name || props.display_name || '';
+      const titleCandidate = props.name || addr.tourism || addr.attraction || addr.amenity || addr.shop || addr.building || placeName.split(',')[0] || '';
+      const cityCandidate = addr.city || addr.town || addr.village || addr.municipality || addr.county || addr.state || '';
+
+      document.getElementById('title').value = titleCandidate.trim();
+      document.getElementById('city').value = cityCandidate.trim();
+      document.getElementById('address').value = placeName.trim();
+      document.getElementById('lat').value = center.lat.toFixed(6);
+      document.getElementById('lng').value = center.lng.toFixed(6);
+
+      if (searchPreviewMarker) searchPreviewMarker.remove();
+      searchPreviewMarker = L.marker(center, { icon: markerIcon(Number(document.getElementById('priority').value || 3)) })
+        .addTo(map)
+        .bindPopup(`<div class="popup-title">${escapeHtml(titleCandidate || 'Ausgewählter Ort')}</div><div class="popup-text">${escapeHtml(placeName)}</div><div class="popup-text">Noch nicht gespeichert.</div>`)
+        .openPopup();
+
+      if (result.bbox) map.fitBounds(result.bbox, { padding: [40, 40], maxZoom: 15 });
+      else map.setView(center, 14, { animate: true });
+    }
+
+    function loadData() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : defaultData;
+        parsed.ideas = (parsed.ideas || []).map(idea => ({ ...idea, day: idea.day || '' }));
+        return parsed;
+      } catch {
+        return defaultData;
+      }
+    }
+
+    function saveData() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      render();
+    }
+
+    function priorityLabel(priority) {
+      return Number(priority) === 3 ? 'Must-see' : Number(priority) === 2 ? 'Sehr interessant' : 'Optional';
+    }
+
+    function markerColor(priority) {
+      return Number(priority) === 3 ? '#ba4a3d' : Number(priority) === 2 ? '#c99b35' : '#607d54';
+    }
+
+    function markerIcon(priority) {
+      const color = markerColor(priority);
+      return L.divIcon({
+        className: '',
+        html: `<div style="width:28px;height:28px;border-radius:50% 50% 50% 4px;background:${color};transform:rotate(-45deg);box-shadow:0 8px 18px rgba(0,0,0,.22);border:3px solid #fffaf2;"><div style="width:8px;height:8px;border-radius:50%;background:#fffaf2;position:absolute;left:7px;top:7px;"></div></div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 28],
+        popupAnchor: [0, -26]
+      });
+    }
+
+    function normalizedIdeas() {
+      return data.ideas.map(idea => ({ ...idea, day: idea.day ? Number(idea.day) : '' }));
+    }
+
+    function getFilteredIdeas() {
+      const priority = document.getElementById('filterPriority')?.value || 'all';
+      const day = document.getElementById('filterDay')?.value || 'all';
+      const city = document.getElementById('filterCity')?.value || 'all';
+      return normalizedIdeas()
+        .filter(i => priority === 'all' || String(i.priority) === priority)
+        .filter(i => day === 'all' || (day === 'none' ? !i.day : String(i.day) === day))
+        .filter(i => city === 'all' || (i.city || 'Kein Ort') === city)
+        .sort((a,b) => {
+          const dayA = a.day || 999;
+          const dayB = b.day || 999;
+          return dayA - dayB || b.priority - a.priority || a.title.localeCompare(b.title);
+        });
+    }
+
+    function updateFilterOptions() {
+      const daySelect = document.getElementById('filterDay');
+      const citySelect = document.getElementById('filterCity');
+      if (!daySelect || !citySelect) return;
+      const selectedDay = daySelect.value;
+      const selectedCity = citySelect.value;
+      const days = [...new Set(normalizedIdeas().map(i => i.day).filter(Boolean))].sort((a,b) => a-b);
+      const hasNoDay = normalizedIdeas().some(i => !i.day);
+      const cities = [...new Set(data.ideas.map(i => i.city || 'Kein Ort'))].sort((a,b) => a.localeCompare(b));
+
+      daySelect.innerHTML = '<option value="all">Alle Tage</option>'
+        + days.map(day => `<option value="${day}">Tag ${day}</option>`).join('')
+        + (hasNoDay ? '<option value="none">Ohne Tag</option>' : '');
+      citySelect.innerHTML = '<option value="all">Alle Orte</option>'
+        + cities.map(city => `<option value="${escapeHtml(city)}">${escapeHtml(city)}</option>`).join('');
+
+      daySelect.value = [...daySelect.options].some(o => o.value === selectedDay) ? selectedDay : 'all';
+      citySelect.value = [...citySelect.options].some(o => o.value === selectedCity) ? selectedCity : 'all';
+    }
+
+    function renderMarkers() {
+      markers.forEach(marker => marker.remove());
+      markers.clear();
+      const bounds = [];
+      getFilteredIdeas().forEach(idea => {
+        const marker = L.marker([idea.lat, idea.lng], { icon: markerIcon(idea.priority) }).addTo(map);
+        marker.bindPopup(`
+          <div class="popup-title"><a class="map-link" href="${googleMapsSearchUrl(idea)}" target="_blank" rel="noopener noreferrer">${escapeHtml(idea.title)}</a></div>
+          <div class="popup-text">${idea.day ? `Tag ${idea.day} · ` : ''}${escapeHtml(idea.city || '')} · ${escapeHtml(idea.category)} · ${priorityLabel(idea.priority)}</div>
+          ${idea.address ? `<div class="popup-text">${escapeHtml(idea.address)}</div>` : ''}
+          ${idea.notes ? `<div class="popup-text">${escapeHtml(idea.notes)}</div>` : ''}
+          <div class="popup-actions">
+            <button class="small" onclick="editIdea('${idea.id}')">Bearbeiten</button>
+            <button class="small danger" onclick="deleteIdea('${idea.id}')">Löschen</button>
+          </div>
+        `);
+        markers.set(idea.id, marker);
+        bounds.push([idea.lat, idea.lng]);
+      });
+      if (bounds.length) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 9 });
+    }
+
+    function renderIdeas() {
+      const list = document.getElementById('ideaList');
+      const ideas = getFilteredIdeas();
+
+      list.innerHTML = ideas.length ? ideas.map(idea => `
+        <article class="idea" onclick="focusIdea('${idea.id}')">
+          <div class="idea-title">
+            <a class="map-link" href="${googleMapsSearchUrl(idea)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHtml(idea.title)}</a>
+            <span class="pill prio-${idea.priority}"><span class="dot"></span>${priorityLabel(idea.priority)}</span>
+          </div>
+          <div class="idea-meta">
+            ${idea.day ? `<span class="pill">Tag ${idea.day}</span>` : '<span class="pill">Ohne Tag</span>'}
+            <span class="pill">${escapeHtml(idea.city || 'Kein Ort')}</span>
+            <span class="pill">${escapeHtml(idea.category)}</span>
+          </div>
+          ${idea.address ? `<p class="idea-notes">📍 ${escapeHtml(idea.address)}</p>` : ''}
+          ${idea.notes ? `<p class="idea-notes">${escapeHtml(idea.notes)}</p>` : ''}
+          <div style="display:flex; gap:8px; margin-top:10px;" onclick="event.stopPropagation()">
+            <button class="small secondary" onclick="editIdea('${idea.id}')">Bearbeiten</button>
+            <button class="small danger" onclick="deleteIdea('${idea.id}')">Löschen</button>
+          </div>
+        </article>
+      `).join('') : '<div class="empty">Noch keine Ideen in dieser Ansicht.</div>';
+    }
+
+    function renderStats() {
+      document.getElementById('countIdeas').textContent = data.ideas.length;
+      document.getElementById('countMust').textContent = data.ideas.filter(i => Number(i.priority) === 3).length;
+      document.getElementById('countVisible').textContent = getFilteredIdeas().length;
+    }
+
+    function render() {
+      updateFilterOptions();
+      renderMarkers();
+      renderIdeas();
+      renderStats();
+      refreshMapSize();
+    }
+
+    document.getElementById('ideaForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = document.getElementById('ideaId').value;
+      const idea = {
+        id: id || crypto.randomUUID(),
+        title: document.getElementById('title').value.trim(),
+        city: document.getElementById('city').value.trim(),
+        address: document.getElementById('address').value.trim(),
+        category: document.getElementById('category').value,
+        priority: Number(document.getElementById('priority').value),
+        day: document.getElementById('day').value ? Number(document.getElementById('day').value) : '',
+        lat: Number(document.getElementById('lat').value),
+        lng: Number(document.getElementById('lng').value),
+        notes: document.getElementById('notes').value.trim()
+      };
+
+      if (id) data.ideas = data.ideas.map(i => i.id === id ? idea : i);
+      else data.ideas.push(idea);
+
+      if (searchPreviewMarker) { searchPreviewMarker.remove(); searchPreviewMarker = null; }
+      resetForm({ keepPlanningValues: true, day: idea.day, priority: idea.priority });
+      saveData();
+      focusIdea(idea.id);
+    });
+
+    function editIdea(id) {
+      const idea = data.ideas.find(i => i.id === id);
+      if (!idea) return;
+      document.getElementById('ideaId').value = idea.id;
+      document.getElementById('title').value = idea.title;
+      document.getElementById('city').value = idea.city || '';
+      document.getElementById('address').value = idea.address || '';
+      document.getElementById('category').value = idea.category;
+      document.getElementById('priority').value = idea.priority;
+      document.getElementById('day').value = idea.day || '';
+      document.getElementById('lat').value = idea.lat;
+      document.getElementById('lng').value = idea.lng;
+      document.getElementById('notes').value = idea.notes || '';
+      document.getElementById('saveIdeaBtn').textContent = 'Änderungen speichern';
+      document.getElementById('cancelEditBtn').style.display = 'inline-block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteIdea(id) {
+      if (!confirm('Diese Idee wirklich löschen?')) return;
+      data.ideas = data.ideas.filter(i => i.id !== id);
+      saveData();
+    }
+
+    function focusIdea(id) {
+      const idea = data.ideas.find(i => i.id === id);
+      const marker = markers.get(id);
+      if (!idea || !marker) return;
+      map.setView([idea.lat, idea.lng], Math.max(map.getZoom(), 12), { animate: true });
+      marker.openPopup();
+    }
+
+    function resetForm(options = {}) {
+      if (searchPreviewMarker) { searchPreviewMarker.remove(); searchPreviewMarker = null; }
+      const keepDay = options.keepPlanningValues ? options.day : '';
+      const keepPriority = options.keepPlanningValues ? options.priority : '3';
+      document.getElementById('ideaForm').reset();
+      document.getElementById('ideaId').value = '';
+      document.getElementById('day').value = keepDay || '';
+      document.getElementById('priority').value = keepPriority || '3';
+      document.getElementById('saveIdeaBtn').textContent = 'Idee speichern';
+      document.getElementById('cancelEditBtn').style.display = 'none';
+    }
+
+    document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
+    ['filterPriority','filterDay','filterCity'].forEach(id => document.getElementById(id).addEventListener('change', render));
+
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      if (!confirm('Alle gespeicherten Daten löschen und Beispielwerte wiederherstellen?')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      data = structuredClone(defaultData);
+      saveData();
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'japan-reiseplanung.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFile').click());
+    document.getElementById('importFile').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const imported = JSON.parse(await file.text());
+        if (!Array.isArray(imported.ideas)) throw new Error('Ungültiges Format');
+        imported.ideas = imported.ideas.map(idea => ({ ...idea, day: idea.day || '' }));
+        data = { ideas: imported.ideas };
+        saveData();
+      } catch (err) {
+        alert('Import fehlgeschlagen: ' + err.message);
+      }
+    });
+
+    function googleMapsSearchUrl(idea) {
+      const query = [idea.title, idea.address, idea.city, 'Japan'].filter(Boolean).join(', ');
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>'"]/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;'
+      }[char]));
+    }
+
+    render();
+  </script>
+</body>
+</html>
